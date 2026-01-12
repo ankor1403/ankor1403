@@ -1,0 +1,182 @@
+╔══════════════════════════════════════════════════════════════════════════╗
+║                                                                          ║
+║  🚀 ЗАПУСК НА СЕРВЕРЕ (ВЫ УЖЕ ПОДКЛЮЧЕНЫ ЧЕРЕЗ SSH)                     ║
+║                                                                          ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+ВЫ НАХОДИТЕСЬ НА СЕРВЕРЕ: root@ixhyswhgny (83.222.25.94)
+
+Используйте эти команды для работы ПРЯМО на сервере (без SSH):
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔍 БЫСТРАЯ ДИАГНОСТИКА (одна команда):
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+curl -sSL "https://raw.githubusercontent.com/ankor1403/ankor1403/claude/audit-dependencies-mkbp0op9n8ha6qpk-Gt2Dm/telegram_diagnostic_local.sh" | bash
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 АВТОМАТИЧЕСКОЕ ИСПРАВЛЕНИЕ (одна команда):
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+curl -sSL "https://raw.githubusercontent.com/ankor1403/ankor1403/claude/audit-dependencies-mkbp0op9n8ha6qpk-Gt2Dm/fix_telegram_service_local.sh" | bash
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📥 СКАЧАТЬ ВСЕ СКРИПТЫ И ЗАПУСТИТЬ:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Создать рабочую директорию
+mkdir -p ~/telegram_fix && cd ~/telegram_fix
+
+# Скачать все скрипты
+curl -sSL "https://raw.githubusercontent.com/ankor1403/ankor1403/claude/audit-dependencies-mkbp0op9n8ha6qpk-Gt2Dm/telegram_diagnostic_local.sh" -o telegram_diagnostic_local.sh
+
+curl -sSL "https://raw.githubusercontent.com/ankor1403/ankor1403/claude/audit-dependencies-mkbp0op9n8ha6qpk-Gt2Dm/fix_telegram_service_local.sh" -o fix_telegram_service_local.sh
+
+curl -sSL "https://raw.githubusercontent.com/ankor1403/ankor1403/claude/audit-dependencies-mkbp0op9n8ha6qpk-Gt2Dm/test_telegram_auth.py" -o test_telegram_auth.py
+
+# Сделать исполняемыми
+chmod +x *.sh
+
+# Запустить диагностику
+./telegram_diagnostic_local.sh
+
+# Если нужно исправить
+./fix_telegram_service_local.sh
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ БЫСТРЫЕ КОМАНДЫ ДЛЯ ПРОВЕРКИ:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Проверить статус контейнеров
+docker ps
+
+# Проверить логи
+docker logs --tail=50 telegram-multi-service
+
+# Проверить health endpoint
+curl http://127.0.0.1:8200/health
+
+# Проверить веб-интерфейс
+curl -I https://telegram.afonin-lisa.ru/
+
+# Перезапустить сервис
+cd /opt/telegram_multi_service && docker-compose restart
+
+# Проверить переменные окружения
+docker exec telegram-multi-service env | grep TELEGRAM
+
+# Установить qrcode для QR авторизации
+docker exec telegram-multi-service pip install qrcode[pil]
+
+# Тестировать авторизацию
+docker cp test_telegram_auth.py telegram-multi-service:/tmp/
+docker exec -it telegram-multi-service python3 /tmp/test_telegram_auth.py
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔥 ЕСЛИ НИЧЕГО НЕ РАБОТАЕТ (полная переустановка):
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+cd /opt/telegram_multi_service
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+docker logs -f telegram-multi-service
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 ПРОВЕРКА РЕЗУЛЬТАТА:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+После исправления откройте в браузере:
+
+✅ Веб-интерфейс: https://telegram.afonin-lisa.ru/
+✅ API документация: https://telegram.afonin-lisa.ru/docs
+✅ Health check: https://telegram.afonin-lisa.ru/health
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 ВАЖНЫЕ ПУТИ:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Telegram Multi-Service:
+  • Код: /opt/telegram_multi_service/
+  • Конфиг: /opt/telegram_multi_service/docker-compose.yml
+  • Env файл: /opt/telegram_multi_service/.env
+  • База данных: docker volume (multi.db)
+
+Старый Telegram Service:
+  • Код: /opt/messengers/
+  • Порт: 8100
+
+Caddy (прокси):
+  • Код: /opt/wappi/
+  • Конфиг: docker exec wappi-caddy cat /etc/caddy/Caddyfile
+  • Порты: 80, 443
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❓ ЧАСТЫЕ ПРОБЛЕМЫ:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Проблема: QR код не работает
+Решение:
+  docker exec telegram-multi-service pip install qrcode[pil]
+  docker restart telegram-multi-service
+
+Проблема: Не отправляется SMS код
+Решение:
+  • Проверьте формат номера: +79277416299 (с +7, не +8)
+  • Подождите 10-15 минут (flood protection)
+  • Проверьте API на https://my.telegram.org/apps
+
+Проблема: База данных не работает
+Решение:
+  cd /opt/telegram_multi_service
+  docker-compose down
+  docker volume rm telegram_multi_service_data
+  docker-compose up -d
+
+Проблема: Сервис не запускается
+Решение:
+  docker logs telegram-multi-service
+  # Посмотрите на ошибки и покажите мне
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 РЕКОМЕНДУЕМЫЙ ПОРЯДОК ДЕЙСТВИЙ:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Запустите диагностику (первая команда сверху)
+2. Посмотрите что не работает
+3. Запустите исправление (вторая команда сверху)
+4. Проверьте результат в браузере
+5. Если не помогло - покажите мне вывод команд
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 СОВЕТ: Скопируйте команду целиком и вставьте в терминал!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
