@@ -1,0 +1,133 @@
+{
+  email admin@afonin-lisa.ru
+  # Автоматический HTTPS для всех доменов
+}
+
+# ============================================
+# TELEGRAM MULTI-SERVICE
+# ============================================
+telegram.afonin-lisa.ru {
+  log {
+    output file /var/log/caddy/telegram.log
+    format json
+  }
+
+  # Основной сервис на корне
+  handle /* {
+    reverse_proxy telegram-multi-service:8200
+  }
+
+  # Старый API на /api/*
+  handle /api/* {
+    reverse_proxy telegram-service:8100
+  }
+
+  # Multi-service на /multi*
+  handle_path /multi* {
+    reverse_proxy telegram-multi-service:8200
+  }
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options nosniff
+    Referrer-Policy strict-origin-when-cross-origin
+    -Server
+  }
+}
+
+# ============================================
+# СТАРЫЙ TELEGRAM API
+# ============================================
+tg.api.afonin-lisa.ru {
+  log {
+    output file /var/log/caddy/tg-api.log
+    format json
+  }
+
+  reverse_proxy telegram-service:8100
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options nosniff
+    Referrer-Policy strict-origin-when-cross-origin
+    -Server
+  }
+}
+
+# ============================================
+# LISA N8N (АВТОМАТИЗАЦИЯ)
+# ============================================
+n8n.afonin-lisa.ru {
+  log {
+    output file /var/log/caddy/n8n.log
+    format json
+  }
+
+  reverse_proxy n8n:5678
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options nosniff
+    Referrer-Policy strict-origin-when-cross-origin
+    -Server
+  }
+}
+
+# ============================================
+# LISA SUPABASE (БАЗА ДАННЫХ)
+# ============================================
+db.afonin-lisa.ru {
+  log {
+    output file /var/log/caddy/supabase.log
+    format json
+  }
+
+  reverse_proxy supabase-kong:8000
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options nosniff
+    Referrer-Policy strict-origin-when-cross-origin
+    -Server
+  }
+}
+
+# ============================================
+# LISA OLLAMA (AI МОДЕЛИ)
+# ============================================
+ai.afonin-lisa.ru {
+  log {
+    output file /var/log/caddy/ollama.log
+    format json
+  }
+
+  reverse_proxy ollama:11434
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options nosniff
+    Referrer-Policy strict-origin-when-cross-origin
+    -Server
+  }
+}
+
+# ============================================
+# ШАБЛОН ДЛЯ НОВЫХ СЕРВИСОВ
+# ============================================
+# Копируйте этот блок и меняйте домен и контейнер:
+#
+# your-service.afonin-lisa.ru {
+#   log {
+#     output file /var/log/caddy/your-service.log
+#     format json
+#   }
+#
+#   reverse_proxy your-container-name:PORT
+#
+#   header {
+#     Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+#     X-Content-Type-Options nosniff
+#     Referrer-Policy strict-origin-when-cross-origin
+#     -Server
+#   }
+# }
