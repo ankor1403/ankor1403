@@ -112,6 +112,41 @@ ai.afonin-lisa.ru {
 }
 
 # ============================================
+# AVITO MULTI-SERVICE
+# ============================================
+avito.afonin-lisa.ru {
+  log {
+    output file /var/log/caddy/avito.log
+    format json
+  }
+
+  reverse_proxy avito-service:8300
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options nosniff
+    Referrer-Policy strict-origin-when-cross-origin
+    -Server
+  }
+}
+
+api.avito.afonin-lisa.ru {
+  log {
+    output file /var/log/caddy/avito-api.log
+    format json
+  }
+
+  reverse_proxy avito-service:8300
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options nosniff
+    Referrer-Policy strict-origin-when-cross-origin
+    -Server
+  }
+}
+
+# ============================================
 # ШАБЛОН ДЛЯ НОВЫХ СЕРВИСОВ
 # ============================================
 # Копируйте этот блок и меняйте домен и контейнер:
