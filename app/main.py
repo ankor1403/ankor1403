@@ -1,16 +1,10 @@
 """
-Avito Management Platform
+Avito Management Platform - Full API Integration
 """
-
-import os
-import sqlite3
-import secrets
-import hashlib
-import json
+import os, sqlite3, secrets, hashlib, json
 from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import urlencode
-
 import requests
 from fastapi import FastAPI, Request, Form, HTTPException, Cookie
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
@@ -27,108 +21,137 @@ AVITO_AUTH_URL = "https://www.avito.ru/oauth"
 AVITO_TOKEN_URL = "https://api.avito.ru/token"
 AVITO_API_BASE = "https://api.avito.ru"
 
+# All available scopes - will try to get as many as possible
+ALL_SCOPES = "user:read user_balance:read messenger:read messenger:write items:info autoload:reports stats:read"
+
 def init_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
-    cursor.execute("""CREATE TABLE IF NOT EXISTS sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, token TEXT UNIQUE NOT NULL, expires_at TIMESTAMP NOT NULL)""")
-    cursor.execute("""CREATE TABLE IF NOT EXISTS profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, avito_user_id TEXT, avito_profile_name TEXT, access_token TEXT, refresh_token TEXT, token_expires_at TIMESTAMP, connected_at TIMESTAMP, status TEXT DEFAULT 'pending')""")
+    c = conn.cursor()
+    c.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password_hash TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    c.execute("CREATE TABLE IF NOT EXISTS sessions (id INTEGER PRIMARY KEY, user_id INTEGER, token TEXT UNIQUE, expires_at TIMESTAMP)")
+    c.execute("CREATE TABLE IF NOT EXISTS profiles (id INTEGER PRIMARY KEY, user_id INTEGER, name TEXT, avito_user_id TEXT, avito_profile_name TEXT, avito_email TEXT, avito_phone TEXT, access_token TEXT, refresh_token TEXT, token_expires_at TIMESTAMP, connected_at TIMESTAMP, status TEXT DEFAULT 'pending')")
     conn.commit()
     conn.close()
 
 init_db()
 
-def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+def hash_password(p): return hashlib.sha256(p.encode()).hexdigest()
 
-def create_session(user_id: int) -> str:
+def create_session(uid):
     token = secrets.token_urlsafe(32)
-    expires_at = datetime.now() + timedelta(days=30)
     conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)", (user_id, token, expires_at))
+    conn.cursor().execute("INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)", (uid, token, datetime.now() + timedelta(days=30)))
     conn.commit()
     conn.close()
     return token
 
-def get_user_from_session(token: Optional[str]) -> Optional[dict]:
-    if not token:
-        return None
+def get_user(token):
+    if not token: return None
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    result = cursor.execute("SELECT u.* FROM users u JOIN sessions s ON u.id = s.user_id WHERE s.token = ? AND s.expires_at > ?", (token, datetime.now())).fetchone()
+    r = conn.cursor().execute("SELECT u.* FROM users u JOIN sessions s ON u.id = s.user_id WHERE s.token = ? AND s.expires_at > ?", (token, datetime.now())).fetchone()
     conn.close()
-    return dict(result) if result else None
+    return dict(r) if r else None
 
-def get_avito_headers(access_token: str) -> dict:
-    return {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+def avito_api(profile, method, endpoint, data=None):
+    """Make Avito API request with proper error handling"""
+    token = profile.get("access_token")
+    if not token: return {"error": "No token"}
 
-def make_avito_request(profile: dict, method: str, endpoint: str, data: dict = None) -> dict:
-    access_token = profile.get("access_token")
-    if not access_token:
-        return {"error": "No access token"}
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     url = f"{AVITO_API_BASE}{endpoint}"
-    headers = get_avito_headers(access_token)
+
     try:
-        if method.upper() == "GET":
-            response = requests.get(url, headers=headers, params=data, timeout=30)
-        elif method.upper() == "POST":
-            response = requests.post(url, headers=headers, json=data, timeout=30)
+        if method == "GET":
+            r = requests.get(url, headers=headers, params=data, timeout=30)
+        elif method == "POST":
+            r = requests.post(url, headers=headers, json=data, timeout=30)
         else:
-            return {"error": "Invalid method"}
-        print(f"API {method} {endpoint}: {response.status_code} - {response.text[:200]}")
-        return response.json() if response.text else {"status": response.status_code}
+            return {"error": "Bad method"}
+
+        print(f"API {method} {endpoint}: {r.status_code}")
+
+        # Try to parse JSON, handle non-JSON responses
+        try:
+            result = r.json()
+        except:
+            if r.status_code == 403:
+                return {"error": "Forbidden - need scope"}
+            elif r.status_code == 404:
+                return {"error": "Not found"}
+            return {"error": f"HTTP {r.status_code}"}
+
+        # Check for error in response
+        if "error" in result:
+            return {"error": result["error"].get("message", str(result["error"]))}
+
+        return result
     except Exception as e:
         return {"error": str(e)}
 
-def get_avito_user_self(access_token: str) -> dict:
-    """Get current user info using access token directly"""
-    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+def get_user_self(token):
+    """Get user info after OAuth"""
+    headers = {"Authorization": f"Bearer {token}"}
     try:
-        # Try different endpoints to get user info
-        endpoints = [
-            "/core/v1/users/self",
-            "/core/v1/accounts/self",
-        ]
-        for endpoint in endpoints:
-            url = f"{AVITO_API_BASE}{endpoint}"
-            print(f"Trying endpoint: {url}")
-            response = requests.get(url, headers=headers, timeout=30)
-            print(f"Response {response.status_code}: {response.text[:300]}")
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("id"):
-                    return data
-        return {"error": "Could not get user info from any endpoint"}
-    except Exception as e:
-        print(f"Error getting user self: {e}")
-        return {"error": str(e)}
+        r = requests.get(f"{AVITO_API_BASE}/core/v1/accounts/self", headers=headers, timeout=30)
+        if r.status_code == 200:
+            return r.json()
+    except: pass
+    return {}
 
-def get_avito_balance(profile: dict) -> dict:
-    user_id = profile.get("avito_user_id")
-    if not user_id:
-        return {"error": "No Avito user ID"}
-    return make_avito_request(profile, "GET", f"/core/v1/accounts/{user_id}/balance/")
+# ============ API Functions ============
+def get_balance(p):
+    uid = p.get("avito_user_id")
+    if not uid: return {"error": "No user ID"}
+    return avito_api(p, "GET", f"/core/v1/accounts/{uid}/balance/")
 
-def get_avito_items(profile: dict, page: int = 1) -> dict:
-    user_id = profile.get("avito_user_id")
-    if not user_id:
-        return {"error": "No Avito user ID"}
-    return make_avito_request(profile, "GET", f"/core/v1/accounts/{user_id}/items/", {"page": page, "per_page": 25})
+def get_items(p, page=1):
+    uid = p.get("avito_user_id")
+    if not uid: return {"error": "No user ID"}
+    # Try v2 API first, then v1
+    result = avito_api(p, "GET", f"/core/v2/items", {"per_page": 25, "page": page})
+    if result.get("error"):
+        result = avito_api(p, "GET", f"/core/v1/accounts/{uid}/items/", {"per_page": 25, "page": page})
+    return result
 
-def get_avito_chats(profile: dict) -> dict:
-    user_id = profile.get("avito_user_id")
-    if not user_id:
-        return {"error": "No Avito user ID"}
-    return make_avito_request(profile, "GET", f"/messenger/v1/accounts/{user_id}/chats/")
+def get_chats(p):
+    uid = p.get("avito_user_id")
+    if not uid: return {"error": "No user ID"}
+    # Try v2 API (newer messenger)
+    result = avito_api(p, "GET", f"/messenger/v2/accounts/{uid}/chats")
+    if result.get("error"):
+        result = avito_api(p, "GET", f"/messenger/v1/accounts/{uid}/chats")
+    return result
 
+def get_chat_messages(p, chat_id):
+    uid = p.get("avito_user_id")
+    if not uid: return {"error": "No user ID"}
+    result = avito_api(p, "GET", f"/messenger/v2/accounts/{uid}/chats/{chat_id}/messages/")
+    if result.get("error"):
+        result = avito_api(p, "GET", f"/messenger/v1/accounts/{uid}/chats/{chat_id}/messages/")
+    return result
+
+def send_message(p, chat_id, text):
+    uid = p.get("avito_user_id")
+    if not uid: return {"error": "No user ID"}
+    result = avito_api(p, "POST", f"/messenger/v2/accounts/{uid}/chats/{chat_id}/messages", {"message": {"text": text}})
+    if result.get("error"):
+        result = avito_api(p, "POST", f"/messenger/v1/accounts/{uid}/chats/{chat_id}/messages", {"message": {"text": text}})
+    return result
+
+def get_stats(p, item_ids, date_from=None, date_to=None):
+    uid = p.get("avito_user_id")
+    if not uid: return {"error": "No user ID"}
+    data = {"itemIds": item_ids}
+    if date_from: data["dateFrom"] = date_from
+    if date_to: data["dateTo"] = date_to
+    return avito_api(p, "POST", f"/stats/v1/accounts/{uid}/items", data)
+
+# ============ Routes ============
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request, session: Optional[str] = Cookie(None)):
-    user = get_user_from_session(session)
-    if user:
-        return RedirectResponse(url="/dashboard", status_code=302)
+    if get_user(session): return RedirectResponse("/dashboard", 302)
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/login", response_class=HTMLResponse)
@@ -139,13 +162,11 @@ async def login_page(request: Request):
 async def login(request: Request, username: str = Form(...), password: str = Form(...)):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    user = conn.cursor().execute("SELECT * FROM users WHERE username = ? AND password_hash = ?", (username, hash_password(password))).fetchone()
+    u = conn.cursor().execute("SELECT * FROM users WHERE username=? AND password_hash=?", (username, hash_password(password))).fetchone()
     conn.close()
-    if not user:
-        return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid credentials"})
-    token = create_session(user["id"])
-    response = RedirectResponse(url="/dashboard", status_code=302)
-    response.set_cookie("session", token, max_age=30*24*60*60, httponly=True)
+    if not u: return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid credentials"})
+    response = RedirectResponse("/dashboard", 302)
+    response.set_cookie("session", create_session(u["id"]), max_age=30*24*60*60, httponly=True)
     return response
 
 @app.get("/register", response_class=HTMLResponse)
@@ -155,228 +176,226 @@ async def register_page(request: Request):
 @app.post("/register")
 async def register(request: Request, username: str = Form(...), password: str = Form(...)):
     conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, hash_password(password)))
+        conn.cursor().execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, hash_password(password)))
         conn.commit()
-        user_id = cursor.lastrowid
+        uid = conn.cursor().execute("SELECT last_insert_rowid()").fetchone()[0]
         conn.close()
-        token = create_session(user_id)
-        response = RedirectResponse(url="/dashboard", status_code=302)
-        response.set_cookie("session", token, max_age=30*24*60*60, httponly=True)
+        response = RedirectResponse("/dashboard", 302)
+        response.set_cookie("session", create_session(uid), max_age=30*24*60*60, httponly=True)
         return response
-    except sqlite3.IntegrityError:
+    except:
         conn.close()
-        return templates.TemplateResponse("register.html", {"request": request, "error": "Username already exists"})
+        return templates.TemplateResponse("register.html", {"request": request, "error": "Username exists"})
 
 @app.get("/logout")
 async def logout(session: Optional[str] = Cookie(None)):
     if session:
         conn = sqlite3.connect(DB_PATH)
-        conn.cursor().execute("DELETE FROM sessions WHERE token = ?", (session,))
+        conn.cursor().execute("DELETE FROM sessions WHERE token=?", (session,))
         conn.commit()
         conn.close()
-    response = RedirectResponse(url="/", status_code=302)
+    response = RedirectResponse("/", 302)
     response.delete_cookie("session")
     return response
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request, session: Optional[str] = Cookie(None)):
-    user = get_user_from_session(session)
-    if not user:
-        return RedirectResponse(url="/login", status_code=302)
+    user = get_user(session)
+    if not user: return RedirectResponse("/login", 302)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    profiles = conn.cursor().execute("SELECT * FROM profiles WHERE user_id = ? ORDER BY id DESC", (user["id"],)).fetchall()
+    profiles = [dict(p) for p in conn.cursor().execute("SELECT * FROM profiles WHERE user_id=? ORDER BY id DESC", (user["id"],)).fetchall()]
     conn.close()
-    return templates.TemplateResponse("dashboard.html", {"request": request, "user": user, "profiles": [dict(p) for p in profiles]})
+    return templates.TemplateResponse("dashboard.html", {"request": request, "user": user, "profiles": profiles})
 
 @app.post("/profile/add")
 async def add_profile(name: str = Form(...), session: Optional[str] = Cookie(None)):
-    user = get_user_from_session(session)
-    if not user:
-        return RedirectResponse(url="/login", status_code=302)
+    user = get_user(session)
+    if not user: return RedirectResponse("/login", 302)
     conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO profiles (user_id, name, status) VALUES (?, ?, 'pending')", (user["id"], name))
-    profile_id = cursor.lastrowid
+    c = conn.cursor()
+    c.execute("INSERT INTO profiles (user_id, name, status) VALUES (?, ?, 'pending')", (user["id"], name))
+    pid = c.lastrowid
     conn.commit()
     conn.close()
-    return RedirectResponse(url=f"/profile/{profile_id}/connect", status_code=302)
+    return RedirectResponse(f"/profile/{pid}/connect", 302)
 
-@app.get("/profile/{profile_id}", response_class=HTMLResponse)
-async def profile_detail(request: Request, profile_id: int, session: Optional[str] = Cookie(None)):
-    user = get_user_from_session(session)
-    if not user:
-        return RedirectResponse(url="/login", status_code=302)
+@app.get("/profile/{pid}")
+async def profile_detail(request: Request, pid: int, session: Optional[str] = Cookie(None)):
+    user = get_user(session)
+    if not user: return RedirectResponse("/login", 302)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    profile = conn.cursor().execute("SELECT * FROM profiles WHERE id = ? AND user_id = ?", (profile_id, user["id"])).fetchone()
+    p = conn.cursor().execute("SELECT * FROM profiles WHERE id=? AND user_id=?", (pid, user["id"])).fetchone()
     conn.close()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    profile_dict = dict(profile)
-    balance = get_avito_balance(profile_dict) if profile_dict.get("avito_user_id") else None
-    return templates.TemplateResponse("profile.html", {"request": request, "user": user, "profile": profile_dict, "balance": balance})
+    if not p: raise HTTPException(404)
+    profile = dict(p)
+    balance = get_balance(profile) if profile.get("avito_user_id") else None
+    return templates.TemplateResponse("profile.html", {"request": request, "user": user, "profile": profile, "balance": balance})
 
-@app.get("/profile/{profile_id}/connect")
-async def connect_avito(profile_id: int, session: Optional[str] = Cookie(None)):
-    user = get_user_from_session(session)
-    if not user:
-        return RedirectResponse(url="/login", status_code=302)
-    params = {
-        "response_type": "code",
-        "client_id": AVITO_CLIENT_ID,
-        "redirect_uri": AVITO_REDIRECT_URI,
-        "scope": "user:read",
-        "state": str(profile_id)
-    }
-    auth_url = f"{AVITO_AUTH_URL}?{urlencode(params)}"
-    print(f"Redirecting to: {auth_url}")
-    return RedirectResponse(url=auth_url, status_code=302)
+@app.get("/profile/{pid}/connect")
+async def connect(pid: int, session: Optional[str] = Cookie(None)):
+    user = get_user(session)
+    if not user: return RedirectResponse("/login", 302)
+    # Request all scopes - Avito will only grant what's configured for the app
+    params = {"response_type": "code", "client_id": AVITO_CLIENT_ID, "redirect_uri": AVITO_REDIRECT_URI, "scope": ALL_SCOPES, "state": str(pid)}
+    return RedirectResponse(f"{AVITO_AUTH_URL}?{urlencode(params)}", 302)
 
-@app.get("/profile/{profile_id}/reconnect")
-async def reconnect_avito(profile_id: int, session: Optional[str] = Cookie(None)):
-    user = get_user_from_session(session)
-    if not user:
-        return RedirectResponse(url="/login", status_code=302)
+@app.get("/profile/{pid}/reconnect")
+async def reconnect(pid: int, session: Optional[str] = Cookie(None)):
+    user = get_user(session)
+    if not user: return RedirectResponse("/login", 302)
     conn = sqlite3.connect(DB_PATH)
-    conn.cursor().execute("UPDATE profiles SET access_token = NULL, refresh_token = NULL, avito_user_id = NULL, status = 'pending' WHERE id = ? AND user_id = ?", (profile_id, user["id"]))
+    conn.cursor().execute("UPDATE profiles SET access_token=NULL, refresh_token=NULL, avito_user_id=NULL, status='pending' WHERE id=? AND user_id=?", (pid, user["id"]))
     conn.commit()
     conn.close()
-    return RedirectResponse(url=f"/profile/{profile_id}/connect", status_code=302)
+    return RedirectResponse(f"/profile/{pid}/connect", 302)
 
-@app.post("/profile/{profile_id}/delete")
-async def delete_profile(profile_id: int, session: Optional[str] = Cookie(None)):
-    user = get_user_from_session(session)
-    if not user:
-        return RedirectResponse(url="/login", status_code=302)
+@app.post("/profile/{pid}/delete")
+async def delete_profile(pid: int, session: Optional[str] = Cookie(None)):
+    user = get_user(session)
+    if not user: return RedirectResponse("/login", 302)
     conn = sqlite3.connect(DB_PATH)
-    conn.cursor().execute("DELETE FROM profiles WHERE id = ? AND user_id = ?", (profile_id, user["id"]))
+    conn.cursor().execute("DELETE FROM profiles WHERE id=? AND user_id=?", (pid, user["id"]))
     conn.commit()
     conn.close()
-    return RedirectResponse(url="/dashboard", status_code=302)
+    return RedirectResponse("/dashboard", 302)
 
 @app.get("/avito/callback")
 @app.get("/api/v1/avito/callback")
-async def avito_callback(request: Request, code: str = None, state: str = None, error: str = None):
-    print(f"=== AVITO CALLBACK ===")
-    print(f"Full URL: {request.url}")
-    print(f"Code: {code[:20] if code else None}..., State: {state}, Error: {error}")
+async def callback(request: Request, code: str = None, state: str = None, error: str = None):
+    print(f"=== CALLBACK: code={code[:20] if code else None}..., state={state}, error={error}")
 
-    if error:
-        return HTMLResponse(f"<h1>OAuth Error: {error}</h1><a href='/dashboard'>Back</a>")
-    if not code or not state:
-        return HTMLResponse("<h1>Missing code or state</h1><a href='/dashboard'>Back</a>")
+    if error: return HTMLResponse(f"<h1>Error: {error}</h1><a href='/dashboard'>Back</a>")
+    if not code or not state: return HTMLResponse("<h1>Missing params</h1><a href='/dashboard'>Back</a>")
 
-    try:
-        profile_id = int(state)
-    except ValueError:
-        return HTMLResponse("<h1>Invalid state</h1><a href='/dashboard'>Back</a>")
+    try: pid = int(state)
+    except: return HTMLResponse("<h1>Invalid state</h1><a href='/dashboard'>Back</a>")
 
-    try:
-        print(f"Exchanging code for token...")
+    # Exchange code for token
+    r = requests.post(AVITO_TOKEN_URL, headers={"Content-Type": "application/x-www-form-urlencoded"},
+        data={"grant_type": "authorization_code", "code": code, "client_id": AVITO_CLIENT_ID,
+              "client_secret": AVITO_CLIENT_SECRET, "redirect_uri": AVITO_REDIRECT_URI})
 
-        token_response = requests.post(AVITO_TOKEN_URL,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            data={
-                "grant_type": "authorization_code",
-                "code": code,
-                "client_id": AVITO_CLIENT_ID,
-                "client_secret": AVITO_CLIENT_SECRET,
-                "redirect_uri": AVITO_REDIRECT_URI
-            })
+    print(f"Token response: {r.status_code} - {r.text[:300]}")
 
-        print(f"Token response status: {token_response.status_code}")
-        print(f"Token response body: {token_response.text}")
+    if r.status_code != 200:
+        return HTMLResponse(f"<h1>Token Error</h1><pre>{r.text}</pre><a href='/dashboard'>Back</a>")
 
-        if token_response.status_code != 200:
-            return HTMLResponse(f"<h1>Token Error: HTTP {token_response.status_code}</h1><pre>{token_response.text}</pre><a href='/dashboard'>Back</a>")
+    data = r.json()
+    if "error" in data:
+        return HTMLResponse(f"<h1>Error: {data.get('error_description', data['error'])}</h1><a href='/dashboard'>Back</a>")
 
-        token_data = token_response.json()
+    access_token = data.get("access_token")
+    refresh_token = data.get("refresh_token")
+    scope = data.get("scope", "")
 
-        if "error" in token_data:
-            return HTMLResponse(f"<h1>Token Error: {token_data.get('error_description', token_data.get('error'))}</h1><a href='/dashboard'>Back</a>")
+    print(f"Got token, scope: {scope}")
 
-        access_token = token_data.get("access_token")
-        refresh_token = token_data.get("refresh_token")
+    if not access_token:
+        return HTMLResponse(f"<h1>No token</h1><pre>{json.dumps(data)}</pre><a href='/dashboard'>Back</a>")
 
-        print(f"Got access_token: {access_token[:30] if access_token else 'None'}...")
+    # Get user info
+    user_info = get_user_self(access_token)
+    avito_user_id = user_info.get("id")
+    avito_name = user_info.get("name")
+    avito_email = user_info.get("email")
+    avito_phone = user_info.get("phone")
 
-        if not access_token:
-            return HTMLResponse(f"<h1>No access_token!</h1><pre>{json.dumps(token_data, indent=2)}</pre><a href='/dashboard'>Back</a>")
+    print(f"User: id={avito_user_id}, name={avito_name}")
 
-        # Get user_id via API call since it's not in token response
-        print("Getting user info via API...")
-        user_info = get_avito_user_self(access_token)
-        avito_user_id = user_info.get("id")
-        avito_name = user_info.get("name") or user_info.get("profile_name")
+    # Save to DB
+    conn = sqlite3.connect(DB_PATH)
+    conn.cursor().execute("""UPDATE profiles SET access_token=?, refresh_token=?, token_expires_at=?,
+        avito_user_id=?, avito_profile_name=?, avito_email=?, avito_phone=?, status='connected', connected_at=?
+        WHERE id=?""", (access_token, refresh_token, datetime.now() + timedelta(seconds=data.get("expires_in", 86400)),
+        avito_user_id, avito_name, avito_email, avito_phone, datetime.now(), pid))
+    conn.commit()
+    conn.close()
 
-        print(f"User info result: id={avito_user_id}, name={avito_name}")
-        print(f"Full user_info: {user_info}")
+    return RedirectResponse(f"/profile/{pid}", 302)
 
-        expires_at = datetime.now() + timedelta(seconds=token_data.get("expires_in", 86400))
-
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE profiles SET access_token = ?, refresh_token = ?, token_expires_at = ?,
-                avito_user_id = ?, avito_profile_name = ?, status = 'connected', connected_at = ?
-            WHERE id = ?
-        """, (access_token, refresh_token, expires_at, avito_user_id, avito_name, datetime.now(), profile_id))
-        conn.commit()
-        conn.close()
-
-        print(f"Profile {profile_id} updated: user_id={avito_user_id}, name={avito_name}")
-        return RedirectResponse(url=f"/profile/{profile_id}", status_code=302)
-
-    except Exception as e:
-        print(f"Exception in callback: {e}")
-        import traceback
-        traceback.print_exc()
-        return HTMLResponse(f"<h1>Error: {str(e)}</h1><a href='/dashboard'>Back</a>")
-
-@app.get("/profile/{profile_id}/items", response_class=HTMLResponse)
-async def profile_items(request: Request, profile_id: int, session: Optional[str] = Cookie(None)):
-    user = get_user_from_session(session)
-    if not user:
-        return RedirectResponse(url="/login", status_code=302)
+# ============ Feature Pages ============
+@app.get("/profile/{pid}/messages")
+async def messages_page(request: Request, pid: int, session: Optional[str] = Cookie(None)):
+    user = get_user(session)
+    if not user: return RedirectResponse("/login", 302)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    profile = conn.cursor().execute("SELECT * FROM profiles WHERE id = ? AND user_id = ?", (profile_id, user["id"])).fetchone()
+    p = conn.cursor().execute("SELECT * FROM profiles WHERE id=? AND user_id=?", (pid, user["id"])).fetchone()
     conn.close()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    items_data = get_avito_items(dict(profile))
-    return templates.TemplateResponse("items.html", {"request": request, "user": user, "profile": dict(profile), "items_data": items_data, "current_page": 1})
+    if not p: raise HTTPException(404)
+    profile = dict(p)
+    chats = get_chats(profile)
+    return templates.TemplateResponse("messages.html", {"request": request, "user": user, "profile": profile, "chats": chats})
 
-@app.get("/profile/{profile_id}/messages", response_class=HTMLResponse)
-async def profile_messages(request: Request, profile_id: int, session: Optional[str] = Cookie(None)):
-    user = get_user_from_session(session)
-    if not user:
-        return RedirectResponse(url="/login", status_code=302)
+@app.get("/profile/{pid}/chat/{chat_id}")
+async def chat_page(request: Request, pid: int, chat_id: str, session: Optional[str] = Cookie(None)):
+    user = get_user(session)
+    if not user: return RedirectResponse("/login", 302)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    profile = conn.cursor().execute("SELECT * FROM profiles WHERE id = ? AND user_id = ?", (profile_id, user["id"])).fetchone()
+    p = conn.cursor().execute("SELECT * FROM profiles WHERE id=? AND user_id=?", (pid, user["id"])).fetchone()
     conn.close()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    chats = get_avito_chats(dict(profile))
-    return templates.TemplateResponse("messages.html", {"request": request, "user": user, "profile": dict(profile), "chats": chats})
+    if not p: raise HTTPException(404)
+    profile = dict(p)
+    messages = get_chat_messages(profile, chat_id)
+    return templates.TemplateResponse("chat.html", {"request": request, "user": user, "profile": profile, "chat_id": chat_id, "messages": messages})
 
-@app.get("/profile/{profile_id}/wallet", response_class=HTMLResponse)
-async def profile_wallet(request: Request, profile_id: int, session: Optional[str] = Cookie(None)):
-    user = get_user_from_session(session)
-    if not user:
-        return RedirectResponse(url="/login", status_code=302)
+@app.post("/profile/{pid}/chat/{chat_id}/send")
+async def send_msg(pid: int, chat_id: str, message: str = Form(...), session: Optional[str] = Cookie(None)):
+    user = get_user(session)
+    if not user: return RedirectResponse("/login", 302)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    profile = conn.cursor().execute("SELECT * FROM profiles WHERE id = ? AND user_id = ?", (profile_id, user["id"])).fetchone()
+    p = conn.cursor().execute("SELECT * FROM profiles WHERE id=? AND user_id=?", (pid, user["id"])).fetchone()
     conn.close()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    balance = get_avito_balance(dict(profile))
-    return templates.TemplateResponse("wallet.html", {"request": request, "user": user, "profile": dict(profile), "balance": balance})
+    if not p: raise HTTPException(404)
+    send_message(dict(p), chat_id, message)
+    return RedirectResponse(f"/profile/{pid}/chat/{chat_id}", 302)
+
+@app.get("/profile/{pid}/items")
+async def items_page(request: Request, pid: int, page: int = 1, session: Optional[str] = Cookie(None)):
+    user = get_user(session)
+    if not user: return RedirectResponse("/login", 302)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    p = conn.cursor().execute("SELECT * FROM profiles WHERE id=? AND user_id=?", (pid, user["id"])).fetchone()
+    conn.close()
+    if not p: raise HTTPException(404)
+    profile = dict(p)
+    items = get_items(profile, page)
+    return templates.TemplateResponse("items.html", {"request": request, "user": user, "profile": profile, "items_data": items, "current_page": page})
+
+@app.get("/profile/{pid}/wallet")
+async def wallet_page(request: Request, pid: int, session: Optional[str] = Cookie(None)):
+    user = get_user(session)
+    if not user: return RedirectResponse("/login", 302)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    p = conn.cursor().execute("SELECT * FROM profiles WHERE id=? AND user_id=?", (pid, user["id"])).fetchone()
+    conn.close()
+    if not p: raise HTTPException(404)
+    profile = dict(p)
+    balance = get_balance(profile)
+    return templates.TemplateResponse("wallet.html", {"request": request, "user": user, "profile": profile, "balance": balance})
+
+@app.get("/profile/{pid}/stats")
+async def stats_page(request: Request, pid: int, session: Optional[str] = Cookie(None)):
+    user = get_user(session)
+    if not user: return RedirectResponse("/login", 302)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    p = conn.cursor().execute("SELECT * FROM profiles WHERE id=? AND user_id=?", (pid, user["id"])).fetchone()
+    conn.close()
+    if not p: raise HTTPException(404)
+    profile = dict(p)
+    # Get items first, then stats
+    items_data = get_items(profile)
+    item_ids = [i["id"] for i in items_data.get("resources", [])] if not items_data.get("error") else []
+    stats = get_stats(profile, item_ids) if item_ids else {"error": "No items"}
+    return templates.TemplateResponse("stats.html", {"request": request, "user": user, "profile": profile, "stats": stats})
 
 if __name__ == "__main__":
     import uvicorn
