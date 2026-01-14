@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Messages - {{ profile.name }} - Avito Manager{% endblock %}
+
+{% block content %}
+<div class="flex flex-between flex-center mb-2">
+    <div>
+        <a href="/profile/{{ profile.id }}" class="text-muted" style="text-decoration: none;">&larr; Back to Profile</a>
+        <h1 style="margin-top: 0.5rem;">Messages</h1>
+    </div>
+</div>
+
+<!-- Navigation -->
+<div class="nav-tabs">
+    <a href="/profile/{{ profile.id }}">Overview</a>
+    <a href="/profile/{{ profile.id }}/messages" class="active">Messages</a>
+    <a href="/profile/{{ profile.id }}/items">Ads</a>
+    <a href="/profile/{{ profile.id }}/stats">Statistics</a>
+    <a href="/profile/{{ profile.id }}/wallet">Wallet</a>
+    <a href="/profile/{{ profile.id }}/autoload">Autoload</a>
+</div>
+
+<!-- Filters -->
+<div class="card">
+    <div class="flex gap-2">
+        <a href="/profile/{{ profile.id }}/messages" class="btn {% if not unread_only %}btn-primary{% else %}btn-outline{% endif %}">
+            All Chats
+        </a>
+        <a href="/profile/{{ profile.id }}/messages?unread_only=true" class="btn {% if unread_only %}btn-primary{% else %}btn-outline{% endif %}">
+            Unread Only
+        </a>
+    </div>
+</div>
+
+<!-- Chats List -->
+{% if chats and chats.chats %}
+<div class="card">
+    <div class="table">
+        {% for chat in chats.chats %}
+        <a href="/profile/{{ profile.id }}/messages/{{ chat.id }}"
+           style="display: block; padding: 1rem; border-bottom: 1px solid #eee; text-decoration: none; color: inherit; transition: background 0.2s;"
+           onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background='transparent'">
+            <div class="flex flex-between flex-center">
+                <div class="flex gap-2 flex-center">
+                    {% if chat.user and chat.user.avatar %}
+                    <img src="{{ chat.user.avatar }}" alt="" style="width: 48px; height: 48px; border-radius: 50%;">
+                    {% else %}
+                    <div style="width: 48px; height: 48px; border-radius: 50%; background: #00a0dc; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
+                        {{ chat.user.name[0] if chat.user and chat.user.name else '?' }}
+                    </div>
+                    {% endif %}
+                    <div>
+                        <div style="font-weight: 600;">
+                            {{ chat.user.name if chat.user else 'Unknown' }}
+                            {% if chat.unread_count > 0 %}
+                            <span class="badge badge-danger" style="font-size: 0.75rem; margin-left: 0.5rem;">{{ chat.unread_count }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-muted" style="font-size: 0.9rem;">
+                            {{ chat.last_message.text[:50] if chat.last_message and chat.last_message.text else 'No messages' }}{% if chat.last_message and chat.last_message.text and chat.last_message.text|length > 50 %}...{% endif %}
+                        </div>
+                        {% if chat.item %}
+                        <div class="text-muted" style="font-size: 0.85rem;">
+                            Re: {{ chat.item.title[:40] if chat.item.title else chat.item_id }}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="text-muted" style="font-size: 0.85rem;">
+                    {{ chat.updated if chat.updated else '' }}
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% elif chats and chats.error %}
+<div class="alert alert-danger">
+    Error loading chats: {{ chats.error }}
+</div>
+{% else %}
+<div class="card empty-state">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+    </svg>
+    <h3>No messages yet</h3>
+    <p class="text-muted">When someone messages you about your ads, they'll appear here</p>
+</div>
+{% endif %}
+{% endblock %}

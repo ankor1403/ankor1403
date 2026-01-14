@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}{{ profile.name }} - Avito Manager{% endblock %}
+
+{% block content %}
+<div class="flex flex-between flex-center mb-2">
+    <div>
+        <a href="/dashboard" class="text-muted" style="text-decoration: none;">&larr; Back to Dashboard</a>
+        <h1 style="margin-top: 0.5rem;">{{ profile.name }}</h1>
+    </div>
+    <span class="badge
+        {% if profile.status == 'connected' %}badge-success
+        {% elif profile.status == 'pending' %}badge-warning
+        {% else %}badge-secondary{% endif %}"
+        style="font-size: 1rem; padding: 0.5rem 1rem;">
+        {{ profile.status|capitalize }}
+    </span>
+</div>
+
+<!-- Navigation -->
+<div class="nav-tabs">
+    <a href="/profile/{{ profile.id }}" class="active">Overview</a>
+    <a href="/profile/{{ profile.id }}/messages">Messages</a>
+    <a href="/profile/{{ profile.id }}/items">Ads</a>
+    <a href="/profile/{{ profile.id }}/stats">Statistics</a>
+    <a href="/profile/{{ profile.id }}/wallet">Wallet</a>
+    <a href="/profile/{{ profile.id }}/autoload">Autoload</a>
+</div>
+
+{% if profile.status == 'connected' %}
+
+<!-- Avito User Info -->
+<div class="grid grid-2">
+    <div class="card">
+        <h3 class="card-title mb-2">Avito Account</h3>
+        {% if avito_user and not avito_user.error %}
+        <table class="table">
+            <tr>
+                <td class="text-muted">User ID</td>
+                <td><strong>{{ avito_user.id }}</strong></td>
+            </tr>
+            <tr>
+                <td class="text-muted">Name</td>
+                <td>{{ avito_user.name or '-' }}</td>
+            </tr>
+            <tr>
+                <td class="text-muted">Email</td>
+                <td>{{ avito_user.email or '-' }}</td>
+            </tr>
+            <tr>
+                <td class="text-muted">Phone</td>
+                <td>{{ avito_user.phone or '-' }}</td>
+            </tr>
+            {% if avito_user.profile_url %}
+            <tr>
+                <td class="text-muted">Profile</td>
+                <td><a href="{{ avito_user.profile_url }}" target="_blank">View on Avito</a></td>
+            </tr>
+            {% endif %}
+        </table>
+        {% else %}
+        <div class="alert alert-warning">
+            Could not load Avito user info: {{ avito_user.error if avito_user else 'Unknown error' }}
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h3 class="card-title mb-2">Wallet Balance</h3>
+        {% if balance and not balance.error %}
+        <div class="stat-card" style="padding: 1rem;">
+            <div class="stat-value">{{ balance.real or balance.balance or 0 }} RUB</div>
+            <div class="stat-label">Available balance</div>
+        </div>
+        {% if balance.bonus %}
+        <p class="text-muted text-center">Bonus: {{ balance.bonus }} RUB</p>
+        {% endif %}
+        <a href="/profile/{{ profile.id }}/wallet" class="btn btn-outline" style="width: 100%; margin-top: 1rem;">
+            View Wallet Details
+        </a>
+        {% else %}
+        <div class="alert alert-info">
+            Balance information not available
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="card">
+    <h3 class="card-title mb-2">Quick Actions</h3>
+    <div class="grid grid-4">
+        <a href="/profile/{{ profile.id }}/messages" class="card stat-card" style="text-decoration: none; color: inherit;">
+            <div style="font-size: 2rem;">📨</div>
+            <div class="stat-label">Messages</div>
+        </a>
+        <a href="/profile/{{ profile.id }}/items" class="card stat-card" style="text-decoration: none; color: inherit;">
+            <div style="font-size: 2rem;">📋</div>
+            <div class="stat-label">My Ads</div>
+        </a>
+        <a href="/profile/{{ profile.id }}/stats" class="card stat-card" style="text-decoration: none; color: inherit;">
+            <div style="font-size: 2rem;">📊</div>
+            <div class="stat-label">Statistics</div>
+        </a>
+        <a href="/profile/{{ profile.id }}/autoload" class="card stat-card" style="text-decoration: none; color: inherit;">
+            <div style="font-size: 2rem;">🔄</div>
+            <div class="stat-label">Autoload</div>
+        </a>
+    </div>
+</div>
+
+<!-- Profile Management -->
+<div class="card">
+    <h3 class="card-title mb-2">Profile Management</h3>
+    <div class="flex gap-2" style="flex-wrap: wrap;">
+        <a href="/profile/{{ profile.id }}/reconnect" class="btn btn-warning">
+            Reconnect Avito Account
+        </a>
+        <a href="/profile/{{ profile.id }}/disconnect" class="btn btn-outline">
+            Disconnect
+        </a>
+        <form method="POST" action="/profile/{{ profile.id }}/delete" style="display: inline;"
+              onsubmit="return confirm('Are you sure you want to delete this profile completely?');">
+            <button type="submit" class="btn btn-danger">Delete Profile</button>
+        </form>
+    </div>
+</div>
+
+{% else %}
+<!-- Not Connected -->
+<div class="card empty-state">
+    <h3>Profile Not Connected</h3>
+    <p class="text-muted mb-2">Connect your Avito account to start managing it</p>
+    <a href="/profile/{{ profile.id }}/connect" class="btn btn-success" style="padding: 1rem 2rem;">
+        Connect to Avito
+    </a>
+</div>
+{% endif %}
+{% endblock %}

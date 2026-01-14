@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}Statistics - {{ profile.name }} - Avito Manager{% endblock %}
+
+{% block content %}
+<div class="flex flex-between flex-center mb-2">
+    <div>
+        <a href="/profile/{{ profile.id }}" class="text-muted" style="text-decoration: none;">&larr; Back to Profile</a>
+        <h1 style="margin-top: 0.5rem;">Statistics</h1>
+    </div>
+</div>
+
+<!-- Navigation -->
+<div class="nav-tabs">
+    <a href="/profile/{{ profile.id }}">Overview</a>
+    <a href="/profile/{{ profile.id }}/messages">Messages</a>
+    <a href="/profile/{{ profile.id }}/items">Ads</a>
+    <a href="/profile/{{ profile.id }}/stats" class="active">Statistics</a>
+    <a href="/profile/{{ profile.id }}/wallet">Wallet</a>
+    <a href="/profile/{{ profile.id }}/autoload">Autoload</a>
+</div>
+
+<!-- Date Filter -->
+<div class="card">
+    <form method="GET" class="flex gap-2 flex-center" style="flex-wrap: wrap;">
+        <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">From</label>
+            <input type="date" name="date_from" class="form-input" value="{{ date_from }}">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">To</label>
+            <input type="date" name="date_to" class="form-input" value="{{ date_to }}">
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top: 1.5rem;">Apply Filter</button>
+    </form>
+</div>
+
+<!-- Summary Stats -->
+{% if stats and stats.items %}
+{% set total_views = namespace(value=0) %}
+{% set total_contacts = namespace(value=0) %}
+{% set total_favorites = namespace(value=0) %}
+{% set total_messages = namespace(value=0) %}
+
+{% for item in stats.items %}
+    {% set total_views.value = total_views.value + (item.views or 0) %}
+    {% set total_contacts.value = total_contacts.value + (item.contacts or 0) %}
+    {% set total_favorites.value = total_favorites.value + (item.favorites or 0) %}
+    {% set total_messages.value = total_messages.value + (item.messages or 0) %}
+{% endfor %}
+
+<div class="grid grid-4">
+    <div class="card stat-card">
+        <div class="stat-value">{{ total_views.value }}</div>
+        <div class="stat-label">Total Views</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-value">{{ total_contacts.value }}</div>
+        <div class="stat-label">Contact Views</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-value">{{ total_favorites.value }}</div>
+        <div class="stat-label">Added to Favorites</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-value">{{ total_messages.value }}</div>
+        <div class="stat-label">Messages</div>
+    </div>
+</div>
+
+<!-- Per-Item Stats -->
+<div class="card">
+    <h3 class="card-title mb-2">Statistics by Ad</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Ad ID</th>
+                <th>Views</th>
+                <th>Contacts</th>
+                <th>Favorites</th>
+                <th>Messages</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in stats.items %}
+            <tr>
+                <td>
+                    <a href="/profile/{{ profile.id }}/items/{{ item.item_id }}">
+                        {{ item.item_id }}
+                    </a>
+                </td>
+                <td>{{ item.views or 0 }}</td>
+                <td>{{ item.contacts or 0 }}</td>
+                <td>{{ item.favorites or 0 }}</td>
+                <td>{{ item.messages or 0 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% elif stats and stats.error %}
+<div class="alert alert-danger">
+    Error loading statistics: {{ stats.error }}
+</div>
+{% else %}
+<div class="card empty-state">
+    <h3>No statistics available</h3>
+    <p class="text-muted">Statistics will appear here once you have active ads</p>
+</div>
+{% endif %}
+
+<!-- Calls Stats -->
+{% if calls_stats and calls_stats.items %}
+<div class="card">
+    <h3 class="card-title mb-2">Call Statistics</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Ad ID</th>
+                <th>Total Calls</th>
+                <th>Answered</th>
+                <th>Missed</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in calls_stats.items %}
+            <tr>
+                <td>{{ item.item_id }}</td>
+                <td>{{ item.calls or 0 }}</td>
+                <td class="text-success">{{ item.answered or 0 }}</td>
+                <td class="text-danger">{{ item.missed or 0 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}

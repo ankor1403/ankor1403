@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - Avito Manager{% endblock %}
+
+{% block content %}
+<div class="flex flex-between flex-center mb-2">
+    <div>
+        <a href="/profile/{{ profile.id }}/messages" class="text-muted" style="text-decoration: none;">&larr; Back to Messages</a>
+        <h1 style="margin-top: 0.5rem;">Chat</h1>
+    </div>
+</div>
+
+<div class="card">
+    <!-- Messages -->
+    <div class="message-list" id="messageList" style="margin-bottom: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 8px;">
+        {% if messages and messages.messages %}
+            {% for msg in messages.messages|reverse %}
+            <div class="message {% if msg.direction == 'out' or msg.author_id == profile.avito_user_id %}outgoing{% else %}incoming{% endif %}">
+                <div style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 0.25rem;">
+                    {{ msg.created }}
+                </div>
+                <div>{{ msg.content.text if msg.content else msg.text }}</div>
+                {% if msg.direction == 'out' or msg.author_id == profile.avito_user_id %}
+                <form method="POST" action="/profile/{{ profile.id }}/messages/{{ chat_id }}/delete/{{ msg.id }}"
+                      style="margin-top: 0.5rem;"
+                      onsubmit="return confirm('Delete this message?');">
+                    <button type="submit" class="btn btn-sm" style="background: rgba(255,255,255,0.2); color: white; font-size: 0.75rem;">
+                        Delete
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% elif messages and messages.error %}
+            <div class="alert alert-danger">{{ messages.error }}</div>
+        {% else %}
+            <p class="text-muted text-center">No messages in this chat</p>
+        {% endif %}
+    </div>
+
+    <!-- Send Message Form -->
+    <form method="POST" action="/profile/{{ profile.id }}/messages/{{ chat_id }}/send">
+        <div class="flex gap-2">
+            <input type="text" name="message" class="form-input" placeholder="Type your message..." required autofocus>
+            <button type="submit" class="btn btn-primary">Send</button>
+        </div>
+    </form>
+</div>
+
+<script>
+    // Scroll to bottom of messages
+    const messageList = document.getElementById('messageList');
+    if (messageList) {
+        messageList.scrollTop = messageList.scrollHeight;
+    }
+</script>
+{% endblock %}

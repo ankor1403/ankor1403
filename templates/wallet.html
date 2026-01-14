@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Wallet - {{ profile.name }} - Avito Manager{% endblock %}
+
+{% block content %}
+<div class="flex flex-between flex-center mb-2">
+    <div>
+        <a href="/profile/{{ profile.id }}" class="text-muted" style="text-decoration: none;">&larr; Back to Profile</a>
+        <h1 style="margin-top: 0.5rem;">Wallet</h1>
+    </div>
+</div>
+
+<!-- Navigation -->
+<div class="nav-tabs">
+    <a href="/profile/{{ profile.id }}">Overview</a>
+    <a href="/profile/{{ profile.id }}/messages">Messages</a>
+    <a href="/profile/{{ profile.id }}/items">Ads</a>
+    <a href="/profile/{{ profile.id }}/stats">Statistics</a>
+    <a href="/profile/{{ profile.id }}/wallet" class="active">Wallet</a>
+    <a href="/profile/{{ profile.id }}/autoload">Autoload</a>
+</div>
+
+<!-- Balance Cards -->
+<div class="grid grid-3">
+    <div class="card stat-card">
+        <div class="stat-value">
+            {% if balance and not balance.error %}
+                {{ balance.real or balance.balance or 0 }}
+            {% else %}
+                -
+            {% endif %}
+        </div>
+        <div class="stat-label">Balance (RUB)</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-value" style="color: #28a745;">
+            {% if balance and balance.bonus %}
+                {{ balance.bonus }}
+            {% else %}
+                0
+            {% endif %}
+        </div>
+        <div class="stat-label">Bonus (RUB)</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-value" style="color: #6c757d;">
+            {% if balance and balance.total %}
+                {{ balance.total }}
+            {% else %}
+                {{ (balance.real or balance.balance or 0) + (balance.bonus or 0) if balance else 0 }}
+            {% endif %}
+        </div>
+        <div class="stat-label">Total (RUB)</div>
+    </div>
+</div>
+
+{% if balance and balance.error %}
+<div class="alert alert-warning">
+    Could not load balance: {{ balance.error }}
+</div>
+{% endif %}
+
+<!-- Operations History -->
+<div class="card">
+    <h3 class="card-title mb-2">Operations History</h3>
+
+    {% if operations and operations.operations %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Amount</th>
+                <th>Type</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for op in operations.operations %}
+            <tr>
+                <td>{{ op.created_at or op.date }}</td>
+                <td>{{ op.description or op.name or '-' }}</td>
+                <td class="{% if op.amount > 0 %}text-success{% else %}text-danger{% endif %}">
+                    {% if op.amount > 0 %}+{% endif %}{{ op.amount }} RUB
+                </td>
+                <td>
+                    <span class="badge {% if op.type == 'income' %}badge-success{% else %}badge-secondary{% endif %}">
+                        {{ op.type or 'expense' }}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Pagination -->
+    <div class="pagination">
+        {% if current_page > 1 %}
+        <a href="?page={{ current_page - 1 }}">&laquo; Prev</a>
+        {% endif %}
+
+        <span class="active">Page {{ current_page }}</span>
+
+        {% if operations.operations|length >= 25 %}
+        <a href="?page={{ current_page + 1 }}">Next &raquo;</a>
+        {% endif %}
+    </div>
+
+    {% elif operations and operations.error %}
+    <div class="alert alert-warning">{{ operations.error }}</div>
+    {% else %}
+    <div class="empty-state">
+        <p class="text-muted">No operations found</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

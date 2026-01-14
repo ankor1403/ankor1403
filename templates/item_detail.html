@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}Ad Details - Avito Manager{% endblock %}
+
+{% block content %}
+<div class="flex flex-between flex-center mb-2">
+    <div>
+        <a href="/profile/{{ profile.id }}/items" class="text-muted" style="text-decoration: none;">&larr; Back to Ads</a>
+        <h1 style="margin-top: 0.5rem;">Ad Details</h1>
+    </div>
+</div>
+
+{% if item and not item.error %}
+<div class="grid grid-2">
+    <!-- Ad Info -->
+    <div class="card">
+        <h3 class="card-title mb-2">{{ item.title }}</h3>
+
+        {% if item.images %}
+        <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            {% for img in item.images[:4] %}
+            <img src="{{ img }}" alt="" style="width: 100px; height: 100px; object-fit: cover; border-radius: 8px;">
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <table class="table">
+            <tr><td class="text-muted">ID</td><td>{{ item.id }}</td></tr>
+            <tr><td class="text-muted">Price</td><td><strong>{{ item.price }} RUB</strong></td></tr>
+            <tr>
+                <td class="text-muted">Status</td>
+                <td>
+                    <span class="badge
+                        {% if item.status == 'active' %}badge-success
+                        {% elif item.status == 'blocked' %}badge-danger
+                        {% else %}badge-secondary{% endif %}">
+                        {{ item.status }}
+                    </span>
+                </td>
+            </tr>
+            {% if item.category %}
+            <tr><td class="text-muted">Category</td><td>{{ item.category.name }}</td></tr>
+            {% endif %}
+            {% if item.address %}
+            <tr><td class="text-muted">Address</td><td>{{ item.address }}</td></tr>
+            {% endif %}
+            {% if item.url %}
+            <tr><td class="text-muted">Link</td><td><a href="{{ item.url }}" target="_blank">View on Avito</a></td></tr>
+            {% endif %}
+        </table>
+    </div>
+
+    <!-- Statistics -->
+    <div class="card">
+        <h3 class="card-title mb-2">Statistics</h3>
+        {% if stats and stats.items %}
+        <div class="grid grid-2">
+            {% for stat in stats.items %}
+            <div class="stat-card">
+                <div class="stat-value">{{ stat.views or 0 }}</div>
+                <div class="stat-label">Views</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ stat.contacts or 0 }}</div>
+                <div class="stat-label">Contacts</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ stat.favorites or 0 }}</div>
+                <div class="stat-label">Favorites</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ stat.messages or 0 }}</div>
+                <div class="stat-label">Messages</div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted">Statistics not available</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- VAS Services -->
+<div class="card">
+    <h3 class="card-title mb-2">Promotion Services (VAS)</h3>
+
+    {% if vas_prices and vas_prices.vas %}
+    <div class="grid grid-3">
+        {% for vas in vas_prices.vas %}
+        <div class="card">
+            <h4>{{ vas.name }}</h4>
+            <p class="text-muted" style="font-size: 0.9rem;">{{ vas.description }}</p>
+            <p style="font-size: 1.25rem; font-weight: bold; color: #00a0dc; margin: 1rem 0;">
+                {{ vas.price }} RUB
+            </p>
+            <form method="POST" action="/profile/{{ profile.id }}/items/{{ item.id }}/vas">
+                <input type="hidden" name="vas_id" value="{{ vas.id }}">
+                <button type="submit" class="btn btn-success btn-sm" style="width: 100%;">Apply</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted">VAS prices not available</p>
+    {% endif %}
+</div>
+
+<!-- Active Services -->
+{% if item.vas %}
+<div class="card">
+    <h3 class="card-title mb-2">Active Services</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Service</th>
+                <th>Started</th>
+                <th>Expires</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for service in item.vas %}
+            <tr>
+                <td>{{ service.name }}</td>
+                <td>{{ service.started_at }}</td>
+                <td>{{ service.finished_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% else %}
+<div class="alert alert-danger">
+    Error loading ad: {{ item.error if item else 'Unknown error' }}
+</div>
+{% endif %}
+{% endblock %}

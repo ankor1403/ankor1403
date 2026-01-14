@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Register - Avito Manager{% endblock %}
+
+{% block content %}
+<div style="max-width: 400px; margin: 2rem auto;">
+    <div class="card">
+        <h2 style="text-align: center; margin-bottom: 1.5rem;">Create Account</h2>
+
+        {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST" action="/register">
+            <div class="form-group">
+                <label class="form-label">Username</label>
+                <input type="text" name="username" class="form-input" required autofocus>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Password</label>
+                <input type="password" name="password" class="form-input" required minlength="6">
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Register</button>
+        </form>
+
+        <p style="text-align: center; margin-top: 1.5rem; color: #666;">
+            Already have an account? <a href="/login" style="color: #00a0dc;">Login</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

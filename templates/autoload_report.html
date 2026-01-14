@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}Autoload Report - Avito Manager{% endblock %}
+
+{% block content %}
+<div class="flex flex-between flex-center mb-2">
+    <div>
+        <a href="/profile/{{ profile.id }}/autoload" class="text-muted" style="text-decoration: none;">&larr; Back to Autoload</a>
+        <h1 style="margin-top: 0.5rem;">Autoload Report #{{ report.id if report else '' }}</h1>
+    </div>
+</div>
+
+{% if report and not report.error %}
+<!-- Report Summary -->
+<div class="card">
+    <h3 class="card-title mb-2">Report Summary</h3>
+    <div class="grid grid-4">
+        <div class="stat-card">
+            <div class="stat-value
+                {% if report.status == 'done' or report.status == 'finished' %}text-success{% endif %}">
+                {{ report.status }}
+            </div>
+            <div class="stat-label">Status</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ report.items_count or 0 }}</div>
+            <div class="stat-label">Total Items</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value text-success">{{ report.new_count or 0 }}</div>
+            <div class="stat-label">New Items</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ report.updated_count or 0 }}</div>
+            <div class="stat-label">Updated</div>
+        </div>
+    </div>
+
+    <table class="table mt-2">
+        <tr>
+            <td class="text-muted">Report ID</td>
+            <td>{{ report.id }}</td>
+        </tr>
+        <tr>
+            <td class="text-muted">Started</td>
+            <td>{{ report.started_at or '-' }}</td>
+        </tr>
+        <tr>
+            <td class="text-muted">Finished</td>
+            <td>{{ report.finished_at or '-' }}</td>
+        </tr>
+        {% if report.errors_count %}
+        <tr>
+            <td class="text-muted">Errors</td>
+            <td class="text-danger">{{ report.errors_count }}</td>
+        </tr>
+        {% endif %}
+    </table>
+</div>
+
+<!-- Items Details -->
+{% if report.items %}
+<div class="card">
+    <h3 class="card-title mb-2">Items in Report</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Ad ID</th>
+                <th>External ID</th>
+                <th>Status</th>
+                <th>Message</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in report.items %}
+            <tr>
+                <td>{{ item.avito_id or '-' }}</td>
+                <td>{{ item.ad_id or item.external_id or '-' }}</td>
+                <td>
+                    <span class="badge
+                        {% if item.status == 'active' or item.status == 'ok' %}badge-success
+                        {% elif item.status == 'error' %}badge-danger
+                        {% else %}badge-secondary{% endif %}">
+                        {{ item.status }}
+                    </span>
+                </td>
+                <td>{{ item.message or item.error or '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- Errors Details -->
+{% if report.errors %}
+<div class="card">
+    <h3 class="card-title mb-2">Errors</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Ad ID</th>
+                <th>Error</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for error in report.errors %}
+            <tr>
+                <td>{{ error.ad_id or error.item_id or '-' }}</td>
+                <td class="text-danger">{{ error.message or error.error }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% else %}
+<div class="alert alert-danger">
+    Error loading report: {{ report.error if report else 'Unknown error' }}
+</div>
+{% endif %}
+{% endblock %}

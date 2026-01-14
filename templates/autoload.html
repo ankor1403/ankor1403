@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Autoload - {{ profile.name }} - Avito Manager{% endblock %}
+
+{% block content %}
+<div class="flex flex-between flex-center mb-2">
+    <div>
+        <a href="/profile/{{ profile.id }}" class="text-muted" style="text-decoration: none;">&larr; Back to Profile</a>
+        <h1 style="margin-top: 0.5rem;">Autoload Reports</h1>
+    </div>
+</div>
+
+<!-- Navigation -->
+<div class="nav-tabs">
+    <a href="/profile/{{ profile.id }}">Overview</a>
+    <a href="/profile/{{ profile.id }}/messages">Messages</a>
+    <a href="/profile/{{ profile.id }}/items">Ads</a>
+    <a href="/profile/{{ profile.id }}/stats">Statistics</a>
+    <a href="/profile/{{ profile.id }}/wallet">Wallet</a>
+    <a href="/profile/{{ profile.id }}/autoload" class="active">Autoload</a>
+</div>
+
+<!-- Last Report Summary -->
+{% if last_report and not last_report.error %}
+<div class="card">
+    <h3 class="card-title mb-2">Last Report</h3>
+    <div class="grid grid-4">
+        <div class="stat-card">
+            <div class="stat-value text-success">{{ last_report.status or '-' }}</div>
+            <div class="stat-label">Status</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ last_report.items_count or 0 }}</div>
+            <div class="stat-label">Total Items</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value text-success">{{ last_report.new_count or 0 }}</div>
+            <div class="stat-label">New</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value text-danger">{{ last_report.errors_count or 0 }}</div>
+            <div class="stat-label">Errors</div>
+        </div>
+    </div>
+    {% if last_report.finished_at %}
+    <p class="text-muted text-center mt-2">Completed: {{ last_report.finished_at }}</p>
+    {% endif %}
+</div>
+{% elif last_report and last_report.error %}
+<div class="alert alert-warning">
+    Could not load last report: {{ last_report.error }}
+</div>
+{% endif %}
+
+<!-- Reports List -->
+<div class="card">
+    <h3 class="card-title mb-2">Reports History</h3>
+
+    {% if reports and reports.reports %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Report ID</th>
+                <th>Status</th>
+                <th>Items</th>
+                <th>New</th>
+                <th>Updated</th>
+                <th>Errors</th>
+                <th>Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for report in reports.reports %}
+            <tr>
+                <td>{{ report.id }}</td>
+                <td>
+                    <span class="badge
+                        {% if report.status == 'done' or report.status == 'finished' %}badge-success
+                        {% elif report.status == 'processing' %}badge-warning
+                        {% else %}badge-secondary{% endif %}">
+                        {{ report.status }}
+                    </span>
+                </td>
+                <td>{{ report.items_count or 0 }}</td>
+                <td class="text-success">{{ report.new_count or 0 }}</td>
+                <td>{{ report.updated_count or 0 }}</td>
+                <td class="{% if report.errors_count > 0 %}text-danger{% endif %}">
+                    {{ report.errors_count or 0 }}
+                </td>
+                <td>{{ report.finished_at or report.started_at }}</td>
+                <td>
+                    <a href="/profile/{{ profile.id }}/autoload/{{ report.id }}" class="btn btn-sm btn-primary">
+                        Details
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Pagination -->
+    <div class="pagination">
+        {% if current_page > 1 %}
+        <a href="?page={{ current_page - 1 }}">&laquo; Prev</a>
+        {% endif %}
+
+        <span class="active">Page {{ current_page }}</span>
+
+        {% if reports.reports|length >= 10 %}
+        <a href="?page={{ current_page + 1 }}">Next &raquo;</a>
+        {% endif %}
+    </div>
+
+    {% elif reports and reports.error %}
+    <div class="alert alert-warning">{{ reports.error }}</div>
+    {% else %}
+    <div class="empty-state">
+        <p class="text-muted">No autoload reports found</p>
+        <p class="text-muted" style="font-size: 0.9rem;">
+            Autoload reports appear here when you use XML/CSV feed to upload ads to Avito
+        </p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

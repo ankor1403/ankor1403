@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Ads - {{ profile.name }} - Avito Manager{% endblock %}
+
+{% block content %}
+<div class="flex flex-between flex-center mb-2">
+    <div>
+        <a href="/profile/{{ profile.id }}" class="text-muted" style="text-decoration: none;">&larr; Back to Profile</a>
+        <h1 style="margin-top: 0.5rem;">My Ads</h1>
+    </div>
+</div>
+
+<!-- Navigation -->
+<div class="nav-tabs">
+    <a href="/profile/{{ profile.id }}">Overview</a>
+    <a href="/profile/{{ profile.id }}/messages">Messages</a>
+    <a href="/profile/{{ profile.id }}/items" class="active">Ads</a>
+    <a href="/profile/{{ profile.id }}/stats">Statistics</a>
+    <a href="/profile/{{ profile.id }}/wallet">Wallet</a>
+    <a href="/profile/{{ profile.id }}/autoload">Autoload</a>
+</div>
+
+<!-- Filters -->
+<div class="card">
+    <form method="GET" class="flex gap-2 flex-center" style="flex-wrap: wrap;">
+        <select name="status" class="form-select" style="max-width: 200px;">
+            <option value="">All statuses</option>
+            <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+            <option value="removed" {% if status_filter == 'removed' %}selected{% endif %}>Removed</option>
+            <option value="blocked" {% if status_filter == 'blocked' %}selected{% endif %}>Blocked</option>
+            <option value="old" {% if status_filter == 'old' %}selected{% endif %}>Old</option>
+        </select>
+        <button type="submit" class="btn btn-primary">Filter</button>
+        {% if status_filter %}
+        <a href="/profile/{{ profile.id }}/items" class="btn btn-outline">Clear</a>
+        {% endif %}
+    </form>
+</div>
+
+<!-- Items List -->
+{% if items_data and items_data.resources %}
+<div class="card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Ad</th>
+                <th>Price</th>
+                <th>Status</th>
+                <th>Views</th>
+                <th>Messages</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items_data.resources %}
+            <tr>
+                <td>
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        {% if item.images and item.images[0] %}
+                        <img src="{{ item.images[0] }}" alt="" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px;">
+                        {% endif %}
+                        <div>
+                            <strong>{{ item.title }}</strong>
+                            <div class="text-muted" style="font-size: 0.85rem;">ID: {{ item.id }}</div>
+                        </div>
+                    </div>
+                </td>
+                <td>{{ item.price }} RUB</td>
+                <td>
+                    <span class="badge
+                        {% if item.status == 'active' %}badge-success
+                        {% elif item.status == 'blocked' %}badge-danger
+                        {% else %}badge-secondary{% endif %}">
+                        {{ item.status }}
+                    </span>
+                </td>
+                <td>{{ item.stats.views if item.stats else '-' }}</td>
+                <td>{{ item.stats.messages if item.stats else '-' }}</td>
+                <td>
+                    <a href="/profile/{{ profile.id }}/items/{{ item.id }}" class="btn btn-sm btn-primary">Details</a>
+                    {% if item.url %}
+                    <a href="{{ item.url }}" target="_blank" class="btn btn-sm btn-outline">View</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if items_data.meta %}
+<div class="pagination">
+    {% if current_page > 1 %}
+    <a href="?page={{ current_page - 1 }}{% if status_filter %}&status={{ status_filter }}{% endif %}">&laquo; Prev</a>
+    {% endif %}
+
+    <span class="active">Page {{ current_page }}</span>
+
+    {% if items_data.resources|length >= 25 %}
+    <a href="?page={{ current_page + 1 }}{% if status_filter %}&status={{ status_filter }}{% endif %}">Next &raquo;</a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% elif items_data and items_data.error %}
+<div class="alert alert-danger">
+    Error loading ads: {{ items_data.error }}
+</div>
+{% else %}
+<div class="card empty-state">
+    <h3>No ads found</h3>
+    <p class="text-muted">You don't have any ads yet or they don't match the filter</p>
+</div>
+{% endif %}
+{% endblock %}

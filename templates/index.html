@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Avito Manager - Home{% endblock %}
+
+{% block content %}
+<div style="text-align: center; padding: 4rem 0;">
+    <h1 style="font-size: 3rem; margin-bottom: 1rem; color: #333;">Avito Management Platform</h1>
+    <p style="font-size: 1.2rem; color: #666; margin-bottom: 2rem; max-width: 600px; margin-left: auto; margin-right: auto;">
+        Manage your Avito profiles, messages, ads, and statistics in one place
+    </p>
+
+    <div class="grid grid-4" style="max-width: 900px; margin: 3rem auto;">
+        <div class="card stat-card">
+            <div class="stat-value">Messages</div>
+            <div class="stat-label">Read & send messages</div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-value">Ads</div>
+            <div class="stat-label">Manage your listings</div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-value">Stats</div>
+            <div class="stat-label">View statistics</div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-value">Wallet</div>
+            <div class="stat-label">Balance & operations</div>
+        </div>
+    </div>
+
+    <div style="display: flex; gap: 1rem; justify-content: center;">
+        <a href="/login" class="btn btn-primary" style="padding: 1rem 2rem; font-size: 1.1rem;">Login</a>
+        <a href="/register" class="btn btn-outline" style="padding: 1rem 2rem; font-size: 1.1rem;">Register</a>
+    </div>
+</div>
+{% endblock %}
