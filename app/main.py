@@ -210,7 +210,15 @@ def make_avito_request(profile: dict, method: str, endpoint: str, data: dict = N
 
 def get_avito_user_info(profile: dict) -> dict:
     """Get user info from Avito"""
-    return make_avito_request(profile, "GET", "/core/v1/users/self/")
+    user_id = profile.get("avito_user_id")
+    if not user_id:
+        return {"error": "No Avito user ID"}
+    # Try the account info endpoint
+    result = make_avito_request(profile, "GET", f"/core/v1/accounts/{user_id}/")
+    if result.get("error") or not result.get("id"):
+        # Fallback - try alternative endpoint
+        result = make_avito_request(profile, "GET", "/core/v1/users/self")
+    return result
 
 def get_avito_balance(profile: dict) -> dict:
     """Get wallet balance"""
@@ -527,11 +535,12 @@ async def connect_avito(profile_id: int, session: Optional[str] = Cookie(None)):
         raise HTTPException(status_code=404, detail="Profile not found")
 
     # Build OAuth URL
+    # Scopes: user:read, messenger:read, messenger:write, items:info, items:apply_vas, stats:read, user_balance:read, autoload:reports
     params = {
         "response_type": "code",
         "client_id": AVITO_CLIENT_ID,
         "redirect_uri": AVITO_REDIRECT_URI,
-        "scope": "messenger:read messenger:write items:info items:apply_vas items:stats user:read user_balance:read autoload:reports",
+        "scope": "user:read messenger:read messenger:write items:info items:apply_vas stats:read user_balance:read autoload:reports",
         "state": str(profile_id)
     }
     auth_url = f"{AVITO_AUTH_URL}?{urlencode(params)}"
@@ -593,7 +602,15 @@ async def delete_profile(profile_id: int, session: Optional[str] = Cookie(None))
     return RedirectResponse(url="/dashboard", status_code=302)
 
 @app.get("/avito/callback")
-async def avito_callback(code: str = None, state: str = None, error: str = None):
+@app.get("/api/v1/avito/callback")
+async def avito_callback(request: Request, code: str = None, state: str = None, error: str = None):
+    """Handle OAuth callback from Avito"""
+    print(f"=== AVITO CALLBACK ===")
+    print(f"URL: {request.url}")
+    print(f"Code: {code[:20] if code else None}...")
+    print(f"State: {state}")
+    print(f"Error: {error}")
+
     if error:
         return HTMLResponse(f"<h1>Error: {error}</h1><a href='/dashboard'>Back to Dashboard</a>")
 
@@ -607,6 +624,10 @@ async def avito_callback(code: str = None, state: str = None, error: str = None)
 
     # Exchange code for token
     try:
+        print(f"Exchanging code for token...")
+        print(f"Client ID: {AVITO_CLIENT_ID}")
+        print(f"Redirect URI: {AVITO_REDIRECT_URI}")
+
         token_response = requests.post(
             AVITO_TOKEN_URL,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
@@ -619,45 +640,76 @@ async def avito_callback(code: str = None, state: str = None, error: str = None)
             }
         )
 
+        print(f"Token response status: {token_response.status_code}")
+        print(f"Token response: {token_response.text[:500]}")
+
         if token_response.status_code != 200:
             error_msg = f"HTTP {token_response.status_code}: {token_response.text}"
             return HTMLResponse(f"<h1>Avito API Error: {error_msg}</h1><a href='/dashboard'>Back</a>")
 
         token_data = token_response.json()
+
+        # Check for error in JSON response
+        if "error" in token_data:
+            error_msg = token_data.get("error_description", token_data.get("error"))
+            return HTMLResponse(f"<h1>Token Error: {error_msg}</h1><a href='/dashboard'>Back</a>")
+
+        access_token = token_data.get("access_token")
+        refresh_token = token_data.get("refresh_token")
+        user_id = token_data.get("user_id")  # Avito returns user_id in token response!
+
+        print(f"Got access_token: {access_token[:20] if access_token else 'None'}...")
+        print(f"Got user_id from token: {user_id}")
+
+        if not access_token:
+            return HTMLResponse(f"<h1>No access token in response</h1><pre>{json.dumps(token_data, indent=2)}</pre><a href='/dashboard'>Back</a>")
+
         expires_at = datetime.now() + timedelta(seconds=token_data.get("expires_in", 86400))
 
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
+
+        # Save token and user_id from token response
         cursor.execute("""
             UPDATE profiles
             SET access_token = ?, refresh_token = ?, token_expires_at = ?,
-                status = 'connected', connected_at = ?
+                avito_user_id = ?, status = 'connected', connected_at = ?
             WHERE id = ?
-        """, (token_data["access_token"], token_data.get("refresh_token"),
-              expires_at, datetime.now(), profile_id))
+        """, (access_token, refresh_token, expires_at, user_id, datetime.now(), profile_id))
         conn.commit()
 
-        # Get user info from Avito
-        conn.row_factory = sqlite3.Row
-        profile = cursor.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+        print(f"Saved token and user_id to database")
 
-        if profile:
-            profile_dict = dict(profile)
-            user_info = get_avito_user_info(profile_dict)
+        # Try to get additional user info from Avito API
+        if user_id:
+            conn.row_factory = sqlite3.Row
+            profile = cursor.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
 
-            if not user_info.get("error") and user_info.get("id"):
-                cursor.execute("""
-                    UPDATE profiles
-                    SET avito_user_id = ?, avito_profile_name = ?, avito_email = ?, avito_phone = ?
-                    WHERE id = ?
-                """, (user_info.get("id"), user_info.get("name"),
-                      user_info.get("email"), user_info.get("phone"), profile_id))
-                conn.commit()
+            if profile:
+                profile_dict = dict(profile)
+                # Try to get user info (may not work with limited scopes)
+                try:
+                    user_info = get_avito_user_info(profile_dict)
+                    print(f"User info response: {user_info}")
+
+                    if not user_info.get("error") and user_info.get("name"):
+                        cursor.execute("""
+                            UPDATE profiles
+                            SET avito_profile_name = ?, avito_email = ?, avito_phone = ?
+                            WHERE id = ?
+                        """, (user_info.get("name"), user_info.get("email"),
+                              user_info.get("phone"), profile_id))
+                        conn.commit()
+                except Exception as e:
+                    print(f"Error getting user info: {e}")
 
         conn.close()
         return RedirectResponse(url=f"/profile/{profile_id}", status_code=302)
 
     except Exception as e:
+        print(f"Exception in callback: {e}")
+        import traceback
+        traceback.print_exc()
         return HTMLResponse(f"<h1>Error: {str(e)}</h1><a href='/dashboard'>Back</a>")
 
 # ============ Items (Ads) Management ============
