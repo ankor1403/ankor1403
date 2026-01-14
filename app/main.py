@@ -11,9 +11,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 app = FastAPI(title="Avito Management Platform")
-templates = Jinja2Templates(directory="templates")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
-DB_PATH = os.getenv("DB_PATH", "data/app.db")
+DB_PATH = os.getenv("DB_PATH", os.path.join(BASE_DIR, "data/app.db"))
 AVITO_CLIENT_ID = os.getenv("AVITO_CLIENT_ID", "")
 AVITO_CLIENT_SECRET = os.getenv("AVITO_CLIENT_SECRET", "")
 AVITO_REDIRECT_URI = os.getenv("AVITO_REDIRECT_URI", "")
@@ -21,8 +22,8 @@ AVITO_AUTH_URL = "https://www.avito.ru/oauth"
 AVITO_TOKEN_URL = "https://api.avito.ru/token"
 AVITO_API_BASE = "https://api.avito.ru"
 
-# All available scopes - will try to get as many as possible
-ALL_SCOPES = "user:read user_balance:read messenger:read messenger:write items:info autoload:reports stats:read"
+# All available scopes - comma-separated format for Avito OAuth
+ALL_SCOPES = "messenger:read,messenger:write,items:info,items:apply_vas,stats:read,autoload:reports,user:read,user_balance:read,user_operations:read"
 
 def init_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
